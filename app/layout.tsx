@@ -2,10 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Deep Cuts",
-  description: "Paste a song. Get ten tracks with the same feel that the algorithm will never play you.",
+  title: "Rabbit Hole",
+  description: "Paste a song. Get ten deep cuts that sound like it and mix in key, then keep digging.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Deep Cuts", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "Rabbit Hole", statusBarStyle: "black-translucent" },
   icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 

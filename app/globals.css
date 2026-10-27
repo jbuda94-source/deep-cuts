@@ -168,3 +168,48 @@ a.tag:hover { color: var(--paper); border-color: var(--muted); }
 }
 .hint { margin-top: 12px; font-size: 13px; color: var(--dim); }
 .seed .art { width: 64px; height: 64px; flex: none; }
+
+/* ---------- key lock ---------- */
+.lock {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px;
+  font-family: var(--mono); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+}
+.lock .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }
+.lock.on { color: var(--paper); border-color: var(--muted); }
+.lock.on .dot { background: #5fd38a; box-shadow: 0 0 8px #5fd38a88; }
+
+/* ---------- key / bpm chips ---------- */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+.chip, .cam {
+  font-family: var(--mono); font-size: 11px; line-height: 1; letter-spacing: .03em;
+  border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px; color: var(--muted);
+}
+.cam { font-weight: 500; }
+.chip.mix { color: #d6b25c; border-color: #4a3a17; }
+.chip.mix.good { color: #5fd38a; border-color: #1f4a30; }
+.track.off .art, .track.off .meta .t { opacity: .72; }
+
+/* ---------- go deeper ---------- */
+.deeper {
+  background: var(--paper); color: var(--bg); border: 0; border-radius: 6px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em;
+  padding: 4px 9px;
+}
+.deeper:hover { background: var(--hot); color: var(--hot-ink); }
+.deeper:disabled { opacity: .4; cursor: default; }
+
+/* ---------- trail ---------- */
+.trail {
+  margin-top: 30px; display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.trail::-webkit-scrollbar { display: none; }
+.trail button {
+  flex: none; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  font-size: 12px; color: var(--muted);
+}
+.trail button .lvl { font-family: var(--mono); font-size: 10px; color: var(--hot); margin-right: 6px; }
+.trail button[aria-current="true"] { border-color: var(--hot); color: var(--paper); }
+.trail + .seed { margin-top: 14px; }
