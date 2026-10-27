@@ -66,16 +66,28 @@ export async function getTrack(id: number): Promise<DzTrack | null> {
 
 // Best-guess ordering of possible matches, so the user can confirm by ear.
 export async function searchSeedMatches(q: string, limit = 6): Promise<DzTrack[]> {
-  const r = await get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(q)}&limit=15`);
-  const hits = r?.data ?? [];
-  const wantsVersion = /mix|edit|remix|version|live/i.test(q);
   const [qa, ...rest] = q.split(/\s[-–—]\s/);
   const qt = rest.join(" - ");
+  // With "Artist - Title", also run Deezer's strict field search so the
+  // original recording is in the pool even if covers/versions crowd the loose search.
+  const [loose, strict] = await Promise.all([
+    get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(q)}&limit=15`),
+    qt
+      ? get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(`artist:"${qa}" track:"${qt}"`)}&limit=15`)
+      : Promise.resolve(null),
+  ]);
+  const byId = new Map<number, DzTrack>();
+  for (const t of [...(strict?.data ?? []), ...(loose?.data ?? [])]) byId.set(t.id, t);
+  const hits = [...byId.values()];
+  const VERSION = /\(|\[|mix|edit|remix|version|live|instrumental|acoustic|karaoke|cover|piano|remaster/i;
+  const wantsVersion = VERSION.test(qt || q);
   const score = (t: DzTrack) =>
     (qt && close(t.artist.name, qa) ? 4 : 0) +
     (qt && close(t.title, qt) ? 2 : 0) +
     (qt && norm(t.title) === norm(qt) && t.title.length <= qt.length + 2 ? 2 : 0) +
-    (!wantsVersion && /mix|edit|remix|version|live/i.test(t.title) ? -3 : 0);
+    (!wantsVersion && VERSION.test(t.title) ? -3 : 0) +
+    // Among equals, the most-played recording is almost always the original.
+    (t.rank / 1_000_000) * 1.5;
   const seen = new Set<string>();
   return [...hits]
     .sort((a, b) => score(b) - score(a))
