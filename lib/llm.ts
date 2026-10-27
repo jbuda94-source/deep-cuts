@@ -5,9 +5,13 @@ export type Candidate = { artist: string; title: string; why: string };
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 
+// Set once a Claude call fails for billing reasons, so later requests on this
+// server instance don't keep paying the round-trip for a guaranteed error.
+let claudeDisabled = false;
+
 export function llmProvider(): "gemini" | "claude" | null {
   if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.ANTHROPIC_API_KEY) return "claude";
+  if (process.env.ANTHROPIC_API_KEY && !claudeDisabled) return "claude";
   return null;
 }
 
@@ -103,6 +107,7 @@ async function callClaude(user: string): Promise<string> {
 
   if (!res.ok) {
     const t = await res.text();
+    if (/credit balance|billing/i.test(t)) claudeDisabled = true;
     throw new Error(`Claude API error ${res.status}: ${t.slice(0, 200)}`);
   }
   const j = await res.json();
