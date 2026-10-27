@@ -45,10 +45,27 @@ async function fromSpotify(url: string): Promise<string | null> {
     if (res.ok) {
       const html = await res.text();
       const title = meta(html, "og:title");
-      const desc = meta(html, "og:description");
+      // <title>Song - song and lyrics by Artist | Spotify</title>
+      const tag = decodeEntities(html.match(/<title>([^<]*)<\/title>/i)?.[1] || "");
+      const byTag = tag.match(/song(?: and lyrics)? by (.+?)\s*\|\s*Spotify/i)?.[1];
+      if (title && byTag) return `${byTag.split(",")[0].trim()} - ${title}`;
+      // og:description: "Listen to X on Spotify. Artist · Song · 1987" or "Artist · Album · Song · 1987"
+      const desc = meta(html, "og:description").replace(/^Listen to .*? on Spotify\.\s*/i, "");
       const artist = desc.split("·")[0]?.trim();
-      if (title && artist && !/spotify/i.test(artist)) return `${artist} - ${title}`;
-      if (title) return title;
+      if (title && artist && !/spotify|^song$/i.test(artist)) return `${artist} - ${title}`;
+    }
+  } catch {}
+  // The embed page carries the artist list in its JSON payload.
+  try {
+    const id = url.match(/track\/([A-Za-z0-9]+)/)?.[1];
+    if (id) {
+      const res = await fetch(`https://open.spotify.com/embed/track/${id}`, { headers: { "User-Agent": UA } });
+      if (res.ok) {
+        const html = await res.text();
+        const name = html.match(/"name":"([^"]+)","uri":"spotify:track:/)?.[1];
+        const artist = html.match(/"artists":\[\{"name":"([^"]+)"/)?.[1];
+        if (name && artist) return `${artist} - ${name}`;
+      }
     }
   } catch {}
   try {

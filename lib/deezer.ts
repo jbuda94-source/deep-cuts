@@ -57,8 +57,16 @@ function close(a: string, b: string) {
 }
 
 export async function searchSeed(q: string): Promise<DzTrack | null> {
-  const r = await get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(q)}&limit=5`);
-  return r?.data?.[0] ?? null;
+  const r = await get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(q)}&limit=10`);
+  const hits = r?.data ?? [];
+  const wantsVersion = /mix|edit|remix|version|live/i.test(q);
+  const [qa, ...rest] = q.split(/\s[-–—]\s/);
+  const qt = rest.join(" - ");
+  const score = (t: DzTrack) =>
+    (qt && close(t.artist.name, qa) ? 4 : 0) +
+    (qt && close(t.title, qt) ? 2 : 0) +
+    (!wantsVersion && /mix|edit|remix|version|live/i.test(t.title) ? -3 : 0);
+  return hits.length ? [...hits].sort((a, b) => score(b) - score(a))[0] : null;
 }
 
 export async function relatedArtists(artistId: number): Promise<{ name: string; nb_fan: number }[]> {
