@@ -82,10 +82,10 @@ export async function searchSeedMatches(q: string, limit = 6): Promise<DzTrack[]
   const VERSION = /\(|\[|mix|edit|remix|version|live|instrumental|acoustic|karaoke|cover|piano|remaster/i;
   const wantsVersion = VERSION.test(qt || q);
   const score = (t: DzTrack) =>
-    (qt && close(t.artist.name, qa) ? 4 : 0) +
+    (qt && close(t.artist.name, qa) ? 6 : 0) +
     (qt && close(t.title, qt) ? 2 : 0) +
     (qt && norm(t.title) === norm(qt) && t.title.length <= qt.length + 2 ? 2 : 0) +
-    (!wantsVersion && VERSION.test(t.title) ? -3 : 0) +
+    (!wantsVersion && VERSION.test(t.title) ? -2 : 0) +
     // Among equals, the most-played recording is almost always the original.
     (t.rank / 1_000_000) * 1.5;
   const seen = new Set<string>();
