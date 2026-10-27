@@ -66,9 +66,19 @@ async function pool<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): P
   return out;
 }
 
+// GET /api/dig?input=...&depth=2 — same thing, handy for testing and sharing.
+export async function GET(req: Request) {
+  const u = new URL(req.url);
+  return dig({ input: u.searchParams.get("input"), depth: u.searchParams.get("depth"), note: u.searchParams.get("note") || "" });
+}
+
 export async function POST(req: Request) {
+  return dig(await req.json().catch(() => ({})));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function dig(body: any) {
   try {
-    const body = await req.json();
     const input = String(body.input || "").trim();
     const depth = [1, 2, 3].includes(Number(body.depth)) ? Number(body.depth) : 2;
     const exclude: string[] = Array.isArray(body.exclude) ? body.exclude.slice(0, 80) : [];
