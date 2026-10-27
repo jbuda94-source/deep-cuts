@@ -52,6 +52,7 @@ export type GraphPick = {
   title: string;
   why: string;
   track: DzTrack;
+  options: DzTrack[]; // a few non-hit tracks, so the caller can pick the one that mixes best
   fans: number;
 };
 
@@ -107,14 +108,16 @@ export async function graphDig(opts: {
   const picks = await pool(ranked, 6, async (n) => {
     const tops = (await get<{ data: DzTrack[] }>(`/artist/${n.a.id}/top?limit=10`))?.data ?? [];
     const usable = tops.filter((t) => t.preview && t.rank <= limits.rank);
-    const choice = usable.find((t) => t !== tops[0]) ?? usable[0];
+    const nonHits = usable.filter((t) => t !== tops[0]);
+    const options = (nonHits.length ? nonHits : usable).slice(0, 4);
+    const choice = options[0];
     if (!choice) return null;
     const via = [...n.via].slice(0, 2);
     const why =
       n.hits > 1
         ? `Linked through ${via.join(" and ")}${n.hits > 2 ? ` (+${n.hits - 2} more paths)` : ""}`
         : `One step past ${via[0]}`;
-    return { artist: n.a.name, title: choice.title, why, track: choice, fans: n.a.nb_fan } as GraphPick;
+    return { artist: n.a.name, title: choice.title, why, track: choice, options, fans: n.a.nb_fan } as GraphPick;
   });
 
   return picks.filter((p): p is GraphPick => p !== null).slice(0, want);

@@ -70,14 +70,17 @@ async function similarTo(mbid: string): Promise<SimilarRec[]> {
 export async function similarRecordings(seedMbid: string, depth: number): Promise<SimilarRec[]> {
   const hop1 = await similarTo(seedMbid);
   let all = [...hop1];
-  if (depth >= 2 && hop1.length) {
-    const fanout = depth === 3 ? 5 : 3;
+  // Always take a second hop: hop 1 is mostly the well-known neighbours that the
+  // popularity filter throws out, so the usable deep cuts live one step further.
+  // Thin hop-1 lists get a wider fan-out so rare songs still get song-level picks.
+  if (hop1.length) {
+    const fanout = Math.min(hop1.length, hop1.length < 20 ? 10 : depth === 3 ? 8 : depth === 2 ? 6 : 4);
     const from = hop1.slice(0, fanout);
     const lists = await Promise.all(from.map((r) => similarTo(r.mbid)));
     lists.forEach((list, i) => {
       for (const r of list) {
         if (r.mbid === seedMbid) continue;
-        all.push({ ...r, score: r.score * (depth === 3 ? 0.85 : 0.6), hop: 2, via: `${from[i].artist} – ${from[i].title}` });
+        all.push({ ...r, score: r.score * (depth === 3 ? 0.85 : depth === 2 ? 0.6 : 0.4), hop: 2, via: `${from[i].artist} – ${from[i].title}` });
       }
     });
   }

@@ -136,7 +136,7 @@ async function dig(body: any) {
         base: Math.min(1, r.score),
         why: r.hop === 1 ? "Listeners play this right alongside your track" : `Two plays out, via ${r.via}`,
       });
-      if (cands.length >= 40) break;
+      if (cands.length >= 60) break;
     }
     for (const p of aiResult?.picks ?? []) {
       if (!accept(p.artist)) continue;
@@ -150,8 +150,10 @@ async function dig(body: any) {
     let pass: Cand[] = withFans.filter((c) => c.fans == null || c.fans <= lim.fans);
 
     // Artist-graph fill only when the listening data runs thin (rare songs).
+    // For each graph artist we analyse a few of their non-hit tracks and keep
+    // the one that best fits THIS seed's key and tempo, so the fill is song-specific.
     let usedGraph = false;
-    if (pass.length < 14) {
+    if (pass.length < 16) {
       const g = await graphDig({
         seedArtistId: dzSeed.artist.id,
         seedArtistName: dzSeed.artist.name,
@@ -159,18 +161,28 @@ async function dig(body: any) {
         exclude: [...exclude, ...pass.map((c) => `${c.artist} – ${c.title}`)],
         limits: lim,
         depth,
-        want: 16 - pass.length,
+        want: Math.min(12, 20 - pass.length),
       });
-      for (const p of g) {
-        if (!accept(p.artist)) continue;
-        pass.push({ artist: p.artist, title: p.title, why: p.why, source: "graph", base: 0.35, track: p.track, fans: p.fans });
+      const fits = await pool(g, 4, async (p) => {
+        const opts = await pool(p.options, 4, async (t) => ({ t, a: await analyzePreview(t.id, t.preview) }));
+        const best = opts
+          .map((o) => ({
+            ...o,
+            fit: keyCompat(seedAnalysis?.camelot, o.a?.camelot).score / 3 + bpmCompat(seedBpm, o.a?.bpm) * 0.5,
+          }))
+          .sort((x, y) => y.fit - x.fit)[0];
+        return { p, best };
+      });
+      for (const { p, best } of fits) {
+        if (!best || !accept(p.artist)) continue;
+        pass.push({ artist: p.artist, title: best.t.title, why: p.why, source: "graph", base: 0.3, track: best.t, fans: p.fans });
         usedGraph = true;
       }
     }
-    pass = pass.slice(0, 26);
+    pass = pass.slice(0, 32);
 
     // ---------- Key + BPM from the previews ----------
-    const analyzed = await pool(pass, 5, async (c) => ({ c, a: await analyzePreview(c.track!.id, c.track!.preview) }));
+    const analyzed = await pool(pass, 6, async (c) => ({ c, a: await analyzePreview(c.track!.id, c.track!.preview) }));
 
     const scored = analyzed.map(({ c, a }) => {
       const kc = keyCompat(seedAnalysis?.camelot, a?.camelot);
@@ -211,7 +223,11 @@ async function dig(body: any) {
     const engine = tracks.some((t) => t.source === "listeners") ? "listeners" : tracks.some((t) => t.source === "ai") ? "ai" : "graph";
     const notes: string[] = [];
     if (keyLock && inKeyCount < tracks.length && seedAnalysis)
-      notes.push(`Only ${inKeyCount} of 10 mix in key at this depth — the rest are the closest fits, marked.`);
+      notes.push(
+        inKeyCount
+          ? `${inKeyCount} of 10 mix in key with your track — the rest are the closest fits, marked.`
+          : "Nothing in this batch is a clean key match — these are the closest fits. Try More from here or a shallower depth."
+      );
     if (usedGraph && engine !== "graph") notes.push("Listening data ran thin, so some picks come from the artist graph.");
 
     return NextResponse.json({
