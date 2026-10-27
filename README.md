@@ -9,6 +9,10 @@ Paste a Spotify or YouTube link (or type `Artist - Song`) and get 10 tracks with
 4. Every pick is checked against Deezer: unknown tracks are flagged, and anything over the popularity ceiling (track rank / artist fan count) for your chosen depth is dropped.
 5. You get 10, with 30-sec previews and Spotify/YouTube links. "Dig again" excludes what you've already seen.
 
-**Env vars (Vercel → Settings → Environment Variables)**
-- `ANTHROPIC_API_KEY` — required
-- `ANTHROPIC_MODEL` — optional, defaults to `claude-sonnet-5-5`
+**Engines**
+- **Free graph engine (default, no keys):** skips the seed's direct "related artists" (what radio plays), walks 2–3 hops out on Deezer's artist graph, keeps small artists several paths agree on, and takes a non-hit track from each.
+- **AI engine (optional):** set `GEMINI_API_KEY` (free tier at aistudio.google.com, no card) or `ANTHROPIC_API_KEY`. AI picks are verified on Deezer and topped up by the graph engine if too few survive. If the AI call fails, the graph engine takes over.
+
+**Env vars (all optional)**
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`

@@ -65,12 +65,13 @@ export async function searchSeed(q: string): Promise<DzTrack | null> {
   const score = (t: DzTrack) =>
     (qt && close(t.artist.name, qa) ? 4 : 0) +
     (qt && close(t.title, qt) ? 2 : 0) +
+    (qt && norm(t.title) === norm(qt) && t.title.length <= qt.length + 2 ? 2 : 0) +
     (!wantsVersion && /mix|edit|remix|version|live/i.test(t.title) ? -3 : 0);
   return hits.length ? [...hits].sort((a, b) => score(b) - score(a))[0] : null;
 }
 
-export async function relatedArtists(artistId: number): Promise<{ name: string; nb_fan: number }[]> {
-  const r = await get<{ data: { name: string; nb_fan: number }[] }>(
+export async function relatedArtists(artistId: number): Promise<{ id: number; name: string; nb_fan: number }[]> {
+  const r = await get<{ data: { id: number; name: string; nb_fan: number }[] }>(
     `/artist/${artistId}/related?limit=20`
   );
   return r?.data ?? [];

@@ -20,8 +20,9 @@ type Result = {
   seed: { label: string; source: string; cover?: string; rank?: number };
   seedRead: string;
   depth: number;
+  engine: "ai" | "graph";
+  notice?: string;
   tracks: Pick[];
-  stats: { asked: number; verified: number; filteredAsTooPopular: number };
 };
 
 const DEPTHS = [
@@ -225,6 +226,10 @@ export default function Home() {
               <div className="lbl">Digging from</div>
               <div className="name">{result.seed.label}</div>
               {result.seedRead && <div className="read">{result.seedRead}</div>}
+              {result.notice && <div className="read">{result.notice}</div>}
+              {result.engine === "graph" && note.trim() && (
+                <div className="read">The steer box only works with the AI engine (add a free Gemini key).</div>
+              )}
             </div>
           </section>
 
@@ -300,7 +305,9 @@ export default function Home() {
         </div>
       )}
 
-      <p className="foot">Picks by Claude · existence &amp; popularity checked against Deezer · previews 30s</p>
+      <p className="foot">
+        {result?.engine === "ai" ? "AI picks" : "Artist-graph picks"} · existence &amp; popularity checked against Deezer · previews 30s
+      </p>
     </main>
   );
 }
