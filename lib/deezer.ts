@@ -57,7 +57,16 @@ function close(a: string, b: string) {
 }
 
 export async function searchSeed(q: string): Promise<DzTrack | null> {
-  const r = await get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(q)}&limit=10`);
+  return (await searchSeedMatches(q))[0] ?? null;
+}
+
+export async function getTrack(id: number): Promise<DzTrack | null> {
+  return get<DzTrack>(`/track/${id}`);
+}
+
+// Best-guess ordering of possible matches, so the user can confirm by ear.
+export async function searchSeedMatches(q: string, limit = 6): Promise<DzTrack[]> {
+  const r = await get<{ data: DzTrack[] }>(`/search?q=${encodeURIComponent(q)}&limit=15`);
   const hits = r?.data ?? [];
   const wantsVersion = /mix|edit|remix|version|live/i.test(q);
   const [qa, ...rest] = q.split(/\s[-–—]\s/);
@@ -67,7 +76,16 @@ export async function searchSeed(q: string): Promise<DzTrack | null> {
     (qt && close(t.title, qt) ? 2 : 0) +
     (qt && norm(t.title) === norm(qt) && t.title.length <= qt.length + 2 ? 2 : 0) +
     (!wantsVersion && /mix|edit|remix|version|live/i.test(t.title) ? -3 : 0);
-  return hits.length ? [...hits].sort((a, b) => score(b) - score(a))[0] : null;
+  const seen = new Set<string>();
+  return [...hits]
+    .sort((a, b) => score(b) - score(a))
+    .filter((t) => {
+      const k = `${norm(t.artist.name)}|${t.title.toLowerCase()}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, limit);
 }
 
 export async function relatedArtists(artistId: number): Promise<{ id: number; name: string; nb_fan: number }[]> {

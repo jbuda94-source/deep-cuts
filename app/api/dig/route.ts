@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveSeed } from "@/lib/seed";
-import { searchSeed, relatedArtists, findTrack, artistFans, norm, type DzTrack } from "@/lib/deezer";
+import { searchSeed, getTrack, relatedArtists, findTrack, artistFans, norm, type DzTrack } from "@/lib/deezer";
 import { getCandidates, llmProvider, type Candidate } from "@/lib/llm";
 import { graphDig } from "@/lib/graph";
 
@@ -69,7 +69,7 @@ async function pool<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): P
 // GET /api/dig?input=...&depth=2 — same thing, handy for testing and sharing.
 export async function GET(req: Request) {
   const u = new URL(req.url);
-  return dig({ input: u.searchParams.get("input"), depth: u.searchParams.get("depth"), note: u.searchParams.get("note") || "" });
+  return dig({ input: u.searchParams.get("input"), seedId: u.searchParams.get("seedId"), depth: u.searchParams.get("depth"), note: u.searchParams.get("note") || "" });
 }
 
 export async function POST(req: Request) {
@@ -83,10 +83,15 @@ async function dig(body: any) {
     const depth = [1, 2, 3].includes(Number(body.depth)) ? Number(body.depth) : 2;
     const exclude: string[] = Array.isArray(body.exclude) ? body.exclude.slice(0, 80) : [];
     const note = typeof body.note === "string" ? body.note.slice(0, 200) : "";
-    if (!input) return NextResponse.json({ error: "Give me a song." }, { status: 400 });
+    const seedId = Number(body.seedId) || 0;
+    if (!input && !seedId) return NextResponse.json({ error: "Give me a song." }, { status: 400 });
 
-    const seed = await resolveSeed(input);
-    const dzSeed = await searchSeed(seed.query);
+    // If the user confirmed a specific track, use it; otherwise best-guess from the input.
+    const confirmed = seedId ? await getTrack(seedId) : null;
+    const seed = confirmed
+      ? { query: `${confirmed.artist.name} - ${confirmed.title}`, source: "text" as const, raw: input }
+      : await resolveSeed(input);
+    const dzSeed = confirmed ?? (await searchSeed(seed.query));
     const seedLabel = dzSeed ? `${dzSeed.artist.name} - ${dzSeed.title}` : seed.query;
     const hop1 = dzSeed ? await relatedArtists(dzSeed.artist.id) : [];
     const lim = LIMITS[depth];
@@ -172,6 +177,8 @@ async function dig(body: any) {
         source: seed.source,
         cover: dzSeed?.album.cover_big || dzSeed?.album.cover_medium,
         rank: dzSeed?.rank,
+        preview: dzSeed?.preview || undefined,
+        id: dzSeed?.id,
       },
       seedRead:
         seedRead ||

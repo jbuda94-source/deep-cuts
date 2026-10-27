@@ -16,8 +16,11 @@ type Pick = {
   youtube: string;
 };
 
+type Match = { id: number; artist: string; title: string; album: string; cover?: string; preview: string | null };
+type Recent = { label: string; id: number };
+
 type Result = {
-  seed: { label: string; source: string; cover?: string; rank?: number };
+  seed: { label: string; source: string; cover?: string; rank?: number; preview?: string; id?: number };
   seedRead: string;
   depth: number;
   engine: "ai" | "graph";
@@ -59,6 +62,13 @@ function save(key: string, v: unknown) {
   } catch {}
 }
 
+const PLAY = (
+  <svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" /></svg>
+);
+const PAUSE = (
+  <svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" /><rect x="14" y="5" width="4" height="14" /></svg>
+);
+
 export default function Home() {
   const [input, setInput] = useState("");
   const [depth, setDepth] = useState(2);
@@ -68,18 +78,24 @@ export default function Home() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [shown, setShown] = useState<string[]>([]);
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<Recent[]>([]);
+  const [matches, setMatches] = useState<Match[] | null>(null);
+  const [finding, setFinding] = useState(false);
   const [playing, setPlaying] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
-  const lastInput = useRef("");
+  const lastSeed = useRef(0);
 
   useEffect(() => {
-    setRecent(store<string[]>("dc_recent", []));
+    // Older versions stored plain strings; keep only confirmed seeds.
+    setRecent(store<unknown[]>("dc_recent", []).filter((r): r is Recent => typeof r === "object" && r !== null && "id" in r));
     setDepth(store<number>("dc_depth", 2));
-    const q = new URLSearchParams(window.location.search).get("q");
-    if (q) {
+    const params = new URLSearchParams(window.location.search);
+    const id = Number(params.get("id"));
+    const q = params.get("q");
+    if (id) dig(id, false);
+    else if (q) {
       setInput(q);
-      dig(q, false);
+      find(q);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -96,22 +112,44 @@ export default function Home() {
     setPlaying(null);
   }
 
-  function toggle(p: Pick) {
-    if (!p.preview) return;
-    if (playing === p.preview) return stop();
+  function toggle(preview?: string | null) {
+    if (!preview) return;
+    if (playing === preview) return stop();
     if (!audio.current) {
       audio.current = new Audio();
       audio.current.onended = () => setPlaying(null);
     }
-    audio.current.src = p.preview;
+    audio.current.src = preview;
     audio.current.play().catch(() => setPlaying(null));
-    setPlaying(p.preview);
+    setPlaying(preview);
   }
 
-  async function dig(q: string, again: boolean) {
+  // Step 1: show the likely matches so the user can confirm the seed by ear.
+  async function find(q: string) {
     const text = q.trim();
-    if (!text || loading) return;
+    if (!text || finding || loading) return;
     stop();
+    setFinding(true);
+    setError("");
+    setResult(null);
+    setMatches(null);
+    try {
+      const res = await fetch(`/api/match?input=${encodeURIComponent(text)}`);
+      const j = await res.json();
+      if (!res.ok || j.error) throw new Error(j.error || "Request failed");
+      setMatches(j.matches as Match[]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something broke.");
+    } finally {
+      setFinding(false);
+    }
+  }
+
+  // Step 2: dig from a confirmed track.
+  async function dig(seedId: number, again: boolean) {
+    if (!seedId || loading) return;
+    stop();
+    setMatches(null);
     setLoading(true);
     setError("");
     setMsg(LOADING[0]);
@@ -121,22 +159,24 @@ export default function Home() {
       const res = await fetch("/api/dig", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: text, depth, note, exclude }),
+        body: JSON.stringify({ seedId, depth, note, exclude }),
       });
       const j = await res.json();
       if (!res.ok || j.error) throw new Error(j.error || "Request failed");
       const r = j as Result;
       setResult(r);
-      lastInput.current = text;
+      lastSeed.current = seedId;
       const names = r.tracks.map((t) => `${t.artist} – ${t.title}`);
       setShown(again ? [...shown, ...names] : names);
-      const label = r.seed.label;
-      const nextRecent = [text.startsWith("http") ? label : text, ...recent.filter((x) => x !== label && x !== text)].slice(0, 6);
-      setRecent(nextRecent);
-      save("dc_recent", nextRecent);
-      const url = new URL(window.location.href);
-      url.searchParams.set("q", text);
-      window.history.replaceState(null, "", url);
+      if (!again) {
+        const nextRecent = [{ label: r.seed.label, id: seedId }, ...recent.filter((x) => x.id !== seedId)].slice(0, 6);
+        setRecent(nextRecent);
+        save("dc_recent", nextRecent);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("q");
+        url.searchParams.set("id", String(seedId));
+        window.history.replaceState(null, "", url);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something broke.");
     } finally {
@@ -158,7 +198,7 @@ export default function Home() {
         className="dig"
         onSubmit={(e) => {
           e.preventDefault();
-          dig(input, false);
+          find(input);
         }}
       >
         <div className="field">
@@ -170,8 +210,8 @@ export default function Home() {
             autoComplete="off"
             enterKeyHint="search"
           />
-          <button className="go" disabled={loading || !input.trim()}>
-            Dig
+          <button className="go" disabled={loading || finding || !input.trim()}>
+            Find
           </button>
         </div>
         <div className="row">
@@ -200,20 +240,54 @@ export default function Home() {
         </div>
       </form>
 
-      {!result && !loading && recent.length > 0 && (
+      {!result && !matches && !loading && !finding && recent.length > 0 && (
         <div className="recent">
           {recent.map((r) => (
-            <button
-              key={r}
-              onClick={() => {
-                setInput(r);
-                dig(r, false);
-              }}
-            >
-              {r}
+            <button key={r.id} onClick={() => dig(r.id, false)}>
+              {r.label}
             </button>
           ))}
         </div>
+      )}
+
+      {finding && (
+        <div className="status">
+          <span className="spin" />
+          Looking it up…
+        </div>
+      )}
+
+      {matches && !loading && (
+        <section className="confirm">
+          <div className="lbl">Is this the one? Tap the cover to listen.</div>
+          <ul className="list">
+            {matches.map((m, i) => {
+              const on = playing != null && playing === m.preview;
+              return (
+                <li className={`match${i === 0 ? " best" : ""}`} key={m.id}>
+                  <button
+                    className={`art${on ? " on" : ""}`}
+                    onClick={() => toggle(m.preview)}
+                    disabled={!m.preview}
+                    aria-label={m.preview ? (on ? "Stop preview" : "Play 30-second preview") : "No preview"}
+                  >
+                    {m.cover ? <img src={m.cover} alt="" /> : <span className="noimg">no art</span>}
+                    {m.preview && <span className="play">{on ? PAUSE : PLAY}</span>}
+                  </button>
+                  <div className="meta">
+                    <div className="t">{m.title}</div>
+                    <div className="a">{m.artist}</div>
+                    <div className="alb">{m.album}</div>
+                  </div>
+                  <button className="pick" onClick={() => dig(m.id, false)}>
+                    Dig
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="hint">Not here? Try typing it as &ldquo;Artist - Song&rdquo;.</p>
+        </section>
       )}
 
       {error && <div className="err">{error}</div>}
@@ -221,7 +295,17 @@ export default function Home() {
       {result && (
         <>
           <section className="seed">
-            {result.seed.cover && <img src={result.seed.cover} alt="" />}
+            <button
+              className={`art${playing != null && playing === result.seed.preview ? " on" : ""}`}
+              onClick={() => toggle(result.seed.preview)}
+              disabled={!result.seed.preview}
+              aria-label="Play seed preview"
+            >
+              {result.seed.cover ? <img src={result.seed.cover} alt="" /> : <span className="noimg">no art</span>}
+              {result.seed.preview && (
+                <span className="play">{playing != null && playing === result.seed.preview ? PAUSE : PLAY}</span>
+              )}
+            </button>
             <div>
               <div className="lbl">Digging from</div>
               <div className="name">{result.seed.label}</div>
@@ -242,18 +326,14 @@ export default function Home() {
                   <div className="num">{String(i + 1).padStart(2, "0")}</div>
                   <button
                     className={`art${on ? " on" : ""}`}
-                    onClick={() => toggle(t)}
+                    onClick={() => toggle(t.preview)}
                     disabled={!t.preview}
                     aria-label={t.preview ? (on ? "Stop preview" : "Play 30-second preview") : "No preview"}
                   >
                     {t.cover ? <img src={t.cover} alt="" loading="lazy" /> : <span className="noimg">no art</span>}
                     {t.preview && (
                       <span className="play">
-                        {on ? (
-                          <svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" /><rect x="14" y="5" width="4" height="14" /></svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" /></svg>
-                        )}
+                        {on ? PAUSE : PLAY}
                       </span>
                     )}
                   </button>
@@ -279,7 +359,7 @@ export default function Home() {
           </ol>
 
           <div className="more">
-            <button className="btn" onClick={() => dig(lastInput.current, true)} disabled={loading}>
+            <button className="btn" onClick={() => dig(lastSeed.current, true)} disabled={loading}>
               Dig again
             </button>
             <button
@@ -287,6 +367,7 @@ export default function Home() {
               onClick={() => {
                 stop();
                 setResult(null);
+                setMatches(null);
                 setShown([]);
                 setInput("");
               }}
