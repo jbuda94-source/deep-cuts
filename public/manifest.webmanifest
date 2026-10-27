@@ -1,0 +1,9 @@
+{
+  "name": "Deep Cuts",
+  "short_name": "Deep Cuts",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0e0c",
+  "theme_color": "#0f0e0c",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
